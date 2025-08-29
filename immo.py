@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 
 # ====== PARAMÈTRES ======
 st.title("Simulateur d'investissement immobilier avancé")
@@ -111,6 +112,7 @@ for mois in range(1, total_mois+1):
         "Année": annee,
         "Mois": mois_annee,
         "Nb biens": len(credits),
+        "Loyers bruts": round(loyers_bruts),
         "Loyers nets": round(loyers_net),
         "Mensualités": round(mensualites),
         "Intérêts": round(interets_totaux),
@@ -120,6 +122,7 @@ for mois in range(1, total_mois+1):
         "Dette totale": dette_totale,
         "Valeur patrimoine": valeur_patrimoine,
         "Patrimoine net": patrimoine_net,
+        "Prix bien": round(prix_bien),
         "Commentaires": "; ".join(commentaires)
     }
     ligne.update(capital_restants)
@@ -138,9 +141,12 @@ df_annee = df.groupby("Année").agg({
     "Trésorerie": "last",
     "Dette totale": "last",
     "Valeur patrimoine": "last",
-    "Patrimoine net": "last"
+    "Patrimoine net": "last",
+    "Prix bien": "last",
+    "Loyers bruts": "sum"
 }).reset_index()
 
+# ====== Indicateurs finaux ======
 st.subheader("Indicateurs finaux")
 col1, col2, col3, col4, col5 = st.columns(5)
 col1.metric("Nb biens", df["Nb biens"].iloc[-1])
@@ -149,49 +155,52 @@ col3.metric("Dette finale", format_nombre(df['Dette totale'].iloc[-1]))
 col4.metric("Patrimoine net", format_nombre(df['Patrimoine net'].iloc[-1]))
 col5.metric("Trésorerie finale", format_nombre(df['Trésorerie'].iloc[-1]))
 
+# ====== Graphiques ======
 st.subheader("Évolution trésorerie et cash flow")
 st.line_chart(df_annee.set_index("Année")[["Cash flow", "Trésorerie"]])
 
 st.subheader("Évolution dette et patrimoine")
 st.line_chart(df_annee.set_index("Année")[["Dette totale", "Valeur patrimoine", "Patrimoine net"]])
 
-# ====== Évolution du nombre de biens ======
-df_biens = df.groupby("Année").agg({"Nb biens": "last"}).reset_index()
+# ====== Évolution du prix d’un bien avec appréciation ======
+df_prix = pd.DataFrame({
+    "Année": range(1, duree_totale_annees+1),
+    "Prix du bien": [round(prix_bien_initial * (1 + appreciation) ** (annee-1)) for annee in range(1, duree_totale_annees+1)]
+})
 
+st.subheader("Évolution du prix d’un bien (avec appréciation)")
+st.dataframe(df_prix)
+
+st.subheader("Revenus locatifs bruts générés par an")
+st.line_chart(df_annee.set_index("Année")[["Loyers bruts"]])
+
+# ====== Nombre de biens ======
+df_biens = df.groupby("Année").agg({"Nb biens": "last"}).reset_index()
 st.subheader("Évolution du nombre de biens par année")
 st.line_chart(df_biens.set_index("Année")["Nb biens"])
 
-# ====== Évolution des dettes par prêt ======
-prets_cols = [col for col in df.columns if col.startswith("Prêt ")]
-
-if prets_cols:
-    df_prets_annee = df.groupby("Année")[prets_cols].last().reset_index()
-    st.subheader("Évolution des dettes par prêt (annuel)")
-    st.line_chart(df_prets_annee.set_index("Année"))
-
-# ====== Évolution des loyers ======
-df_loyers = df.groupby("Année").agg({"Loyers nets": "sum"}).reset_index()
-st.subheader("Évolution des loyers nets annuels")
-st.line_chart(df_loyers.set_index("Année"))
 
 # ====== Cash flow cumulatif ======
 df_annee["Cash flow cumulatif"] = df_annee["Cash flow"].cumsum()
 st.subheader("Cash flow cumulatif")
 st.line_chart(df_annee.set_index("Année")[["Cash flow cumulatif"]])
 
-import plotly.express as px
 
-# Répartition patrimoine/dettes à la dernière année
-derniere_annee = df_annee.iloc[-1]
-valeurs = {
-    "Dette totale": derniere_annee["Dette totale"],
-    "Patrimoine net": derniere_annee["Patrimoine net"]
-}
+# ====== Évolution des dettes par prêt (annuel) ======
+prets_cols = [col for col in df.columns if col.startswith("Prêt ")]
 
-fig = px.pie(
-    names=list(valeurs.keys()),
-    values=list(valeurs.values()),
-    title="Répartition patrimoine net vs dette totale"
-)
+if prets_cols:
+    df_prets_annee = df.groupby("Année")[prets_cols].last().reset_index()
 
-st.plotly_chart(fig)
+    # Ajout d'une colonne Dette totale
+    df_prets_annee["Dette totale"] = df_prets_annee[prets_cols].sum(axis=1)
+
+    st.subheader("Évolution des dettes par prêt (annuel)")
+
+    # Tableau avec colonne dette totale
+    st.dataframe(df_prets_annee)
+
+    # Graphique
+    st.line_chart(df_prets_annee.set_index("Année"))
+
+
