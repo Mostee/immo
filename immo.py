@@ -161,3 +161,37 @@ df_biens = df.groupby("Année").agg({"Nb biens": "last"}).reset_index()
 st.subheader("Évolution du nombre de biens par année")
 st.line_chart(df_biens.set_index("Année")["Nb biens"])
 
+# ====== Évolution des dettes par prêt ======
+prets_cols = [col for col in df.columns if col.startswith("Prêt ")]
+
+if prets_cols:
+    df_prets_annee = df.groupby("Année")[prets_cols].last().reset_index()
+    st.subheader("Évolution des dettes par prêt (annuel)")
+    st.line_chart(df_prets_annee.set_index("Année"))
+
+# ====== Évolution des loyers ======
+df_loyers = df.groupby("Année").agg({"Loyers nets": "sum"}).reset_index()
+st.subheader("Évolution des loyers nets annuels")
+st.line_chart(df_loyers.set_index("Année"))
+
+# ====== Cash flow cumulatif ======
+df_annee["Cash flow cumulatif"] = df_annee["Cash flow"].cumsum()
+st.subheader("Cash flow cumulatif")
+st.line_chart(df_annee.set_index("Année")[["Cash flow cumulatif"]])
+
+import plotly.express as px
+
+# Répartition patrimoine/dettes à la dernière année
+derniere_annee = df_annee.iloc[-1]
+valeurs = {
+    "Dette totale": derniere_annee["Dette totale"],
+    "Patrimoine net": derniere_annee["Patrimoine net"]
+}
+
+fig = px.pie(
+    names=list(valeurs.keys()),
+    values=list(valeurs.values()),
+    title="Répartition patrimoine net vs dette totale"
+)
+
+st.plotly_chart(fig)
